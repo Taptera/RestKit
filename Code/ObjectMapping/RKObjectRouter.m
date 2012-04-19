@@ -3,7 +3,7 @@
 //  RestKit
 //
 //  Created by Blake Watters on 10/18/10.
-//  Copyright 2010 RestKit
+//  Copyright (c) 2009-2012 RestKit. All rights reserved.
 //  
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 //
 
 #import "RKObjectRouter.h"
-#import "RKClient.h"
+#import "RKPathMatcher.h"
 #import "NSDictionary+RKRequestSerialization.h"
 
 @implementation RKObjectRouter
@@ -121,8 +121,10 @@
 
     if (routeEntry) {
         BOOL addEscapes = [[routeEntry objectForKey:@"addEscapes"] boolValue];
-        NSString *path = RKMakePathWithObjectAddingEscapes([routeEntry objectForKey:@"resourcePath"], object, addEscapes);
-        return path;
+        RKPathMatcher *matcher = [RKPathMatcher matcherWithPattern:[routeEntry objectForKey:@"resourcePath"]];
+        NSString *interpolatedPath = [matcher pathFromObject:object addingEscapes:addEscapes];
+
+        return interpolatedPath;        
     }
 
     [NSException raise:@"Unable to find a routable path for object" format:@"Unable to find a routable path for object of type '%@' for HTTP Method '%@'", className, methodName];

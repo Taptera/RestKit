@@ -3,7 +3,7 @@
 //  RestKit
 //
 //  Created by Blake Watters on 7/28/09.
-//  Copyright 2009 RestKit
+//  Copyright (c) 2009-2012 RestKit. All rights reserved.
 //  
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@
 #import "RKAlert.h"
 #import "RKLog.h"
 #import "RKPathMatcher.h"
-#import "NSString+RestKit.h"
+#import "NSString+RKAdditions.h"
 #import "RKDirectory.h"
 
 // Set Logging Component
@@ -34,7 +34,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Global
 
-static RKClient* sharedClient = nil;
+static RKClient *sharedClient = nil;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // URL Conveniences functions
@@ -88,6 +88,7 @@ NSString *RKPathAppendQueryParams(NSString *resourcePath, NSDictionary *queryPar
 @synthesize cachePolicy = _cachePolicy;
 @synthesize requestQueue = _requestQueue;
 @synthesize timeoutInterval = _timeoutInterval;
+@synthesize defaultHTTPEncoding = _defaultHTTPEncoding;
 @synthesize cacheTimeoutInterval = _cacheTimeoutInterval;
 
 + (RKClient *)sharedClient {
@@ -121,6 +122,7 @@ NSString *RKPathAppendQueryParams(NSString *resourcePath, NSDictionary *queryPar
 	if (self) {
 		_HTTPHeaders = [[NSMutableDictionary alloc] init];
         _additionalRootCertificates = [[NSMutableSet alloc] init];
+        _defaultHTTPEncoding = NSUTF8StringEncoding;
         self.cacheTimeoutInterval = 0;
 		self.serviceUnavailableAlertEnabled = NO;
 		self.serviceUnavailableAlertTitle = NSLocalizedString(@"Service Unavailable", nil);
@@ -212,6 +214,10 @@ NSString *RKPathAppendQueryParams(NSString *resourcePath, NSDictionary *queryPar
     request.cache = self.requestCache;
     request.queue = self.requestQueue;
     request.reachabilityObserver = self.reachabilityObserver;
+    request.defaultHTTPEncoding = self.defaultHTTPEncoding;
+    
+    request.additionalRootCertificates = self.additionalRootCertificates;
+    request.disableCertificateValidation = self.disableCertificateValidation;
     
     // If a timeoutInterval was set on the client, we'll pass it on to the request.
     // Otherwise, we'll let the request default to its own timeout interval.
@@ -283,7 +289,7 @@ NSString *RKPathAppendQueryParams(NSString *resourcePath, NSDictionary *queryPar
     if (! [newBaseURL isEqual:[NSNull null]]) {
         // Configure a cache for the new base URL
         [_requestCache release];
-        _requestCache = [[RKRequestCache alloc] initWithCachePath:[self cachePath]
+        _requestCache = [[RKRequestCache alloc] initWithPath:[self cachePath]
                                                     storagePolicy:RKRequestCacheStoragePolicyPermanently];
     
         // Determine reachability strategy (if user has not already done so)
@@ -408,6 +414,43 @@ NSString *RKPathAppendQueryParams(NSString *resourcePath, NSDictionary *queryPar
 // deprecated
 - (void)setCache:(RKRequestCache *)requestCache {
     self.requestCache = requestCache;
+}
+
+#pragma mark - Block Request Dispatching
+
+- (RKRequest *)sendRequestToResourcePath:(NSString *)resourcePath usingBlock:(void (^)(RKRequest *request))block {
+    RKRequest *request = [self requestWithResourcePath:resourcePath];
+    if (block) block(request);
+    [request send];
+    return request;
+}
+
+- (void)get:(NSString *)resourcePath usingBlock:(void (^)(RKRequest *request))block {
+    [self sendRequestToResourcePath:resourcePath usingBlock:^(RKRequest *request) {
+        request.method = RKRequestMethodGET;
+        block(request);
+    }];
+}
+
+- (void)post:(NSString *)resourcePath usingBlock:(void (^)(RKRequest *request))block {
+    [self sendRequestToResourcePath:resourcePath usingBlock:^(RKRequest *request) {
+        request.method = RKRequestMethodPOST;
+        block(request);
+    }];
+}
+
+- (void)put:(NSString *)resourcePath usingBlock:(void (^)(RKRequest *request))block {
+    [self sendRequestToResourcePath:resourcePath usingBlock:^(RKRequest *request) {
+        request.method = RKRequestMethodPUT;
+        block(request);
+    }];
+}
+
+- (void)delete:(NSString *)resourcePath usingBlock:(void (^)(RKRequest *request))block {
+    [self sendRequestToResourcePath:resourcePath usingBlock:^(RKRequest *request) {
+        request.method = RKRequestMethodDELETE;
+        block(request);
+    }];
 }
 
 // deprecated

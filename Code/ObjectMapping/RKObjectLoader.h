@@ -3,7 +3,7 @@
 //  RestKit
 //
 //  Created by Blake Watters on 8/8/09.
-//  Copyright 2009 RestKit
+//  Copyright (c) 2009-2012 RestKit. All rights reserved.
 //  
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@
 #import "Network.h"
 #import "RKObjectMapping.h"
 #import "RKObjectMappingResult.h"
+#import "RKObjectMappingProvider.h"
 
 @class RKObjectMappingProvider;
 @class RKObjectLoader;
@@ -80,6 +81,16 @@ typedef void(^RKObjectLoaderDidLoadObjectsDictionaryBlock)(NSDictionary *diction
 - (void)objectLoaderDidFinishLoading:(RKObjectLoader *)objectLoader;
 
 /**
+ Informs the delegate that the object loader has serialized the source object into a serializable representation
+ for sending to the remote system. The serialization can be modified to allow customization of the request payload independent of mapping.
+ 
+ @param objectLoader The object loader performing the serialization.
+ @param sourceObject The object that was serialized.
+ @param serialization The serialization of sourceObject to be sent to the remote backend for processing.
+ */
+- (void)objectLoader:(RKObjectLoader *)objectLoader didSerializeSourceObject:(id)sourceObject toSerialization:(inout id<RKRequestSerializable> *)serialization;
+
+/**
  Sent when an object loader encounters a response status code or MIME Type that RestKit does not know how to handle.
  
  Response codes in the 2xx, 4xx, and 5xx range are all handled as you would expect. 2xx (successful) response codes
@@ -133,6 +144,7 @@ typedef void(^RKObjectLoaderDidLoadObjectsDictionaryBlock)(NSDictionary *diction
     NSString* _serializationMIMEType;
     NSObject* _sourceObject;
 	NSObject* _targetObject;
+    dispatch_queue_t _mappingQueue;
 }
 
 /**
@@ -244,6 +256,13 @@ typedef void(^RKObjectLoaderDidLoadObjectsDictionaryBlock)(NSDictionary *diction
  * be used to update the targetObject's attributes and relationships.
  */
 @property (nonatomic, retain) NSObject *targetObject;
+
+/**
+ The Grand Central Dispatch queue to perform our parsing and object mapping
+ within. By default, object loaders will use the mappingQueue from the RKObjectManager
+ that created the loader. You can override this on a per-loader basis as necessary.
+ */
+@property (nonatomic, assign) dispatch_queue_t mappingQueue;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
