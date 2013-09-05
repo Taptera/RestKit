@@ -10,8 +10,8 @@
 
 @implementation RKMacOSXAppDelegate
 
-@synthesize client;
-@synthesize window;
+@synthesize client = _client;
+@synthesize window = _window;
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification
 {
@@ -20,11 +20,13 @@
     [self.client get:@"/status/user_timeline/RestKit.json" delegate:self];
 }
 
-- (void)request:(RKRequest*)request didLoadResponse:(RKResponse *)response {
+- (void)request:(RKRequest *)request didLoadResponse:(RKResponse *)response
+{
     NSLog(@"Loaded JSON: %@", [response bodyAsString]);
 }
 
-- (void)dealloc {
+- (void)dealloc
+{
     [super dealloc];
 }
 

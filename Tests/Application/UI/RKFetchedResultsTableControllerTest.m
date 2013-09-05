@@ -12,8 +12,9 @@
 #import "RKManagedObjectMapping.h"
 #import "RKHuman.h"
 #import "RKEvent.h"
-#import "RKManagedObjectCache.h"
 #import "RKAbstractTableController_Internals.h"
+#import "RKManagedObjectCaching.h"
+#import "RKTableControllerTestDelegate.h"
 
 // Expose the object loader delegate for testing purposes...
 @interface RKFetchedResultsTableController () <RKObjectLoaderDelegate>
@@ -24,68 +25,69 @@
 - (BOOL)isFooterRow:(NSUInteger)row;
 - (BOOL)isEmptySection:(NSUInteger)section;
 - (BOOL)isEmptyRow:(NSUInteger)row;
-- (BOOL)isHeaderIndexPath:(NSIndexPath*)indexPath;
-- (BOOL)isFooterIndexPath:(NSIndexPath*)indexPath;
-- (BOOL)isEmptyItemIndexPath:(NSIndexPath*)indexPath;
-- (NSIndexPath*)fetchedResultsIndexPathForIndexPath:(NSIndexPath*)indexPath;
+- (BOOL)isHeaderIndexPath:(NSIndexPath *)indexPath;
+- (BOOL)isFooterIndexPath:(NSIndexPath *)indexPath;
+- (BOOL)isEmptyItemIndexPath:(NSIndexPath *)indexPath;
+- (NSIndexPath *)fetchedResultsIndexPathForIndexPath:(NSIndexPath *)indexPath;
 
 @end
 
-@interface RKFetchedResultsTableControllerSpecViewController : UIViewController
+@interface RKFetchedResultsTableControllerSpecViewController : UITableViewController
 @end
 
 @implementation RKFetchedResultsTableControllerSpecViewController
 @end
 
-@interface RKFetchedResultsTableControllerTest : RKTestCase {
-    NSAutoreleasePool *_autoreleasePool;
-}
-
+@interface RKFetchedResultsTableControllerTest : RKTestCase
 @end
 
 @implementation RKFetchedResultsTableControllerTest
 
-- (void)setUp {
-    _autoreleasePool = [NSAutoreleasePool new];
+- (void)setUp
+{
+    [RKTestFactory setUp];
+
+    [[[[UIApplication sharedApplication] windows] objectAtIndex:0] setRootViewController:nil];
 }
 
-- (void)tearDown {
-    [_autoreleasePool drain];
-    _autoreleasePool = nil;
+- (void)tearDown
+{
+    [RKTestFactory tearDown];
 }
 
-- (void)bootstrapStoreAndCache {
-//    RKLogConfigureByName("RestKit/UI", RKLogLevelTrace);
-    RKManagedObjectStore* store = RKTestNewManagedObjectStore();
-    RKManagedObjectMapping* humanMapping = [RKManagedObjectMapping mappingForEntityWithName:@"RKHuman" inManagedObjectStore:store];
+- (void)bootstrapStoreAndCache
+{
+    RKManagedObjectStore *store = [RKTestFactory managedObjectStore];
+    RKManagedObjectMapping *humanMapping = [RKManagedObjectMapping mappingForEntityWithName:@"RKHuman" inManagedObjectStore:store];
     [humanMapping mapKeyPath:@"id" toAttribute:@"railsID"];
     [humanMapping mapAttributes:@"name", nil];
     humanMapping.primaryKeyAttribute = @"railsID";
 
     [RKHuman truncateAll];
     assertThatInt([RKHuman count:nil], is(equalToInt(0)));
-    RKHuman* blake = [RKHuman createEntity];
+    RKHuman *blake = [RKHuman createEntity];
     blake.railsID = [NSNumber numberWithInt:1234];
     blake.name = @"blake";
-    RKHuman* other = [RKHuman createEntity];
+    RKHuman *other = [RKHuman createEntity];
     other.railsID = [NSNumber numberWithInt:5678];
     other.name = @"other";
-    NSError* error = [store save];
+    NSError *error = nil;
+    [store save:&error];
     assertThat(error, is(nilValue()));
     assertThatInt([RKHuman count:nil], is(equalToInt(2)));
 
-    RKObjectManager* objectManager = RKTestNewObjectManager();
+    RKObjectManager *objectManager = [RKTestFactory objectManager];
     [objectManager.mappingProvider setMapping:humanMapping forKeyPath:@"human"];
     objectManager.objectStore = store;
 
-    id mockObjectCache = [OCMockObject mockForProtocol:@protocol(RKManagedObjectCache)];
-    [[[mockObjectCache stub] andReturn:[RKHuman requestAllSortedBy:@"name" ascending:YES]] fetchRequestForResourcePath:@"/JSON/humans/all.json"];
-    objectManager.objectStore.managedObjectCache = mockObjectCache;
+    [objectManager.mappingProvider setObjectMapping:humanMapping forResourcePathPattern:@"/JSON/humans/all\\.json" withFetchRequestBlock:^NSFetchRequest *(NSString *resourcePath) {
+        return [RKHuman requestAllSortedBy:@"name" ascending:YES];
+    }];
 }
 
-- (void)bootstrapNakedObjectStoreAndCache {
-//    RKLogConfigureByName("RestKit/UI", RKLogLevelTrace);
-    RKManagedObjectStore* store = RKTestNewManagedObjectStore();
+- (void)bootstrapNakedObjectStoreAndCache
+{
+    RKManagedObjectStore *store = [RKTestFactory managedObjectStore];
     RKManagedObjectMapping *eventMapping = [RKManagedObjectMapping mappingForClass:[RKEvent class] inManagedObjectStore:store];
     [eventMapping mapKeyPath:@"event_id" toAttribute:@"eventID"];
     [eventMapping mapKeyPath:@"type" toAttribute:@"eventType"];
@@ -99,23 +101,23 @@
     nakedEvent.eventType = @"Concert";
     nakedEvent.location = @"Performance Hall";
     nakedEvent.summary = @"Shindig";
-    NSError* error = [store save];
+    NSError *error = nil;
+    [store save:&error];
     assertThat(error, is(nilValue()));
     assertThatInt([RKEvent count:nil], is(equalToInt(1)));
 
-    RKObjectManager* objectManager = RKTestNewObjectManager();
+    RKObjectManager *objectManager = [RKTestFactory objectManager];
     [objectManager.mappingProvider addObjectMapping:eventMapping];
     objectManager.objectStore = store;
 
-    id mockObjectCache = [OCMockObject mockForProtocol:@protocol(RKManagedObjectCache)];
-    [[[mockObjectCache stub] andReturn:[RKEvent requestAllSortedBy:@"eventType" ascending:YES]] fetchRequestForResourcePath:@"/JSON/NakedEvents.json"];
-    objectManager.objectStore.managedObjectCache = mockObjectCache;
+    id mockMappingProvider = [OCMockObject partialMockForObject:objectManager.mappingProvider];
+    [[[mockMappingProvider stub] andReturn:[RKEvent requestAllSortedBy:@"eventType" ascending:YES]] fetchRequestForResourcePath:@"/JSON/NakedEvents.json"];
 }
 
-- (void)bootstrapEmptyStoreAndCache {
-//    RKLogConfigureByName("RestKit/UI", RKLogLevelTrace);
-    RKManagedObjectStore* store = RKTestNewManagedObjectStore();
-    RKManagedObjectMapping* humanMapping = [RKManagedObjectMapping mappingForEntityWithName:@"RKHuman" inManagedObjectStore:store];
+- (void)bootstrapEmptyStoreAndCache
+{
+    RKManagedObjectStore *store = [RKTestFactory managedObjectStore];
+    RKManagedObjectMapping *humanMapping = [RKManagedObjectMapping mappingForEntityWithName:@"RKHuman" inManagedObjectStore:store];
     [humanMapping mapKeyPath:@"id" toAttribute:@"railsID"];
     [humanMapping mapAttributes:@"name", nil];
     humanMapping.primaryKeyAttribute = @"railsID";
@@ -123,17 +125,17 @@
     [RKHuman truncateAll];
     assertThatInt([RKHuman count:nil], is(equalToInt(0)));
 
-    RKObjectManager* objectManager = RKTestNewObjectManager();
+    RKObjectManager *objectManager = [RKTestFactory objectManager];
     [objectManager.mappingProvider setMapping:humanMapping forKeyPath:@"human"];
     objectManager.objectStore = store;
 
-    id mockObjectCache = [OCMockObject niceMockForProtocol:@protocol(RKManagedObjectCache)];
-    [[[mockObjectCache stub] andReturn:[RKHuman requestAllSortedBy:@"name" ascending:YES]] fetchRequestForResourcePath:@"/JSON/humans/all.json"];
-    [[[mockObjectCache stub] andReturn:[RKHuman requestAllSortedBy:@"name" ascending:YES]] fetchRequestForResourcePath:@"/empty/array"];
-    objectManager.objectStore.managedObjectCache = mockObjectCache;
+    id mockMappingProvider = [OCMockObject partialMockForObject:objectManager.mappingProvider];
+    [[[mockMappingProvider stub] andReturn:[RKHuman requestAllSortedBy:@"name" ascending:YES]] fetchRequestForResourcePath:@"/JSON/humans/all.json"];
+    [[[mockMappingProvider stub] andReturn:[RKHuman requestAllSortedBy:@"name" ascending:YES]] fetchRequestForResourcePath:@"/empty/array"];
 }
 
-- (void)stubObjectManagerToOnline {
+- (void)stubObjectManagerToOnline
+{
     RKObjectManager *objectManager = [RKObjectManager sharedManager];
     id mockManager = [OCMockObject partialMockForObject:objectManager];
     [mockManager setExpectationOrderMatters:YES];
@@ -143,100 +145,88 @@
     [[[mockManager stub] andReturnValue:OCMOCK_VALUE(online)] isOnline];
 }
 
-- (void)testLoadWithATableViewControllerAndResourcePath {
+- (void)testLoadWithATableViewControllerAndResourcePath
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
-    [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController = [RKFetchedResultsTableController tableControllerForTableViewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     [tableController loadTable];
 
     assertThat(tableController.viewController, is(equalTo(viewController)));
-    assertThat(tableController.tableView, is(equalTo(tableView)));
+    assertThat(tableController.tableView, is(equalTo(viewController.tableView)));
     assertThat(tableController.resourcePath, is(equalTo(@"/JSON/humans/all.json")));
 }
 
-- (void)testLoadWithATableViewControllerAndResourcePathFromNakedObjects {
+- (void)testLoadWithATableViewControllerAndResourcePathFromNakedObjects
+{
     [self bootstrapNakedObjectStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
-    [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                                viewController:viewController];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController = [RKFetchedResultsTableController tableControllerForTableViewController:viewController];
     tableController.resourcePath = @"/JSON/NakedEvents.json";
     [tableController setObjectMappingForClass:[RKEvent class]];
     [tableController loadTable];
 
     assertThat(tableController.viewController, is(equalTo(viewController)));
-    assertThat(tableController.tableView, is(equalTo(tableView)));
+    assertThat(tableController.tableView, is(equalTo(viewController.tableView)));
     assertThat(tableController.resourcePath, is(equalTo(@"/JSON/NakedEvents.json")));
 
-    RKTableViewCellMapping* cellMapping = [RKTableViewCellMapping mappingForClass:[UITableViewCell class]];
+    RKTableViewCellMapping *cellMapping = [RKTableViewCellMapping mappingForClass:[UITableViewCell class]];
     [cellMapping mapKeyPath:@"summary" toAttribute:@"textLabel.text"];
-    RKTableViewCellMappings* mappings = [RKTableViewCellMappings new];
+    RKTableViewCellMappings *mappings = [RKTableViewCellMappings new];
     [mappings setCellMapping:cellMapping forClass:[RKEvent class]];
     tableController.cellMappings = mappings;
 
-    UITableViewCell* cell = [tableController tableView:tableController.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
+    UITableViewCell *cell = [tableController tableView:tableController.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
     assertThat(cell.textLabel.text, is(equalTo(@"Shindig")));
 }
 
 
-- (void)testLoadWithATableViewControllerAndResourcePathAndPredicateAndSortDescriptors {
+- (void)testLoadWithATableViewControllerAndResourcePathAndPredicateAndSortDescriptors
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    NSPredicate* predicate = [NSPredicate predicateWithValue:TRUE];
-    NSArray* sortDescriptors = [NSArray arrayWithObject:[NSSortDescriptor sortDescriptorWithKey:@"name"
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    NSPredicate *predicate = [NSPredicate predicateWithValue:TRUE];
+    NSArray *sortDescriptors = [NSArray arrayWithObject:[NSSortDescriptor sortDescriptorWithKey:@"name"
                                                                                       ascending:YES]];
-    RKFetchedResultsTableController* tableController =
-    [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+    RKFetchedResultsTableController *tableController = [RKFetchedResultsTableController tableControllerForTableViewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.predicate = predicate;
     tableController.sortDescriptors = sortDescriptors;
     [tableController loadTable];
 
     assertThat(tableController.viewController, is(equalTo(viewController)));
-    assertThat(tableController.tableView, is(equalTo(tableView)));
     assertThat(tableController.resourcePath, is(equalTo(@"/JSON/humans/all.json")));
     assertThat(tableController.fetchRequest, is(notNilValue()));
     assertThat([tableController.fetchRequest predicate], is(equalTo(predicate)));
     assertThat([tableController.fetchRequest sortDescriptors], is(equalTo(sortDescriptors)));
 }
 
-- (void)testLoadWithATableViewControllerAndResourcePathAndSectionNameAndCacheName {
+- (void)testLoadWithATableViewControllerAndResourcePathAndSectionNameAndCacheName
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
-    [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController = [RKFetchedResultsTableController tableControllerForTableViewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.sectionNameKeyPath = @"name";
     tableController.cacheName = @"allHumansCache";
     [tableController loadTable];
 
     assertThat(tableController.viewController, is(equalTo(viewController)));
-    assertThat(tableController.tableView, is(equalTo(tableView)));
     assertThat(tableController.resourcePath, is(equalTo(@"/JSON/humans/all.json")));
     assertThat(tableController.fetchRequest, is(notNilValue()));
     assertThat(tableController.fetchedResultsController.sectionNameKeyPath, is(equalTo(@"name")));
     assertThat(tableController.fetchedResultsController.cacheName, is(equalTo(@"allHumansCache")));
 }
 
-- (void)testLoadWithAllParams {
+- (void)testLoadWithAllParams
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    NSPredicate* predicate = [NSPredicate predicateWithValue:TRUE];
-    NSArray* sortDescriptors = [NSArray arrayWithObject:[NSSortDescriptor sortDescriptorWithKey:@"name"
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    NSPredicate *predicate = [NSPredicate predicateWithValue:TRUE];
+    NSArray *sortDescriptors = [NSArray arrayWithObject:[NSSortDescriptor sortDescriptorWithKey:@"name"
                                                                                       ascending:YES]];
-    RKFetchedResultsTableController* tableController =
-    [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+    RKFetchedResultsTableController *tableController = [RKFetchedResultsTableController tableControllerForTableViewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.predicate = predicate;
     tableController.sortDescriptors = sortDescriptors;
@@ -245,7 +235,6 @@
     [tableController loadTable];
 
     assertThat(tableController.viewController, is(equalTo(viewController)));
-    assertThat(tableController.tableView, is(equalTo(tableView)));
     assertThat(tableController.resourcePath, is(equalTo(@"/JSON/humans/all.json")));
     assertThat(tableController.fetchRequest, is(notNilValue()));
     assertThat([tableController.fetchRequest predicate], is(equalTo(predicate)));
@@ -254,13 +243,14 @@
     assertThat(tableController.fetchedResultsController.cacheName, is(equalTo(@"allHumansCache")));
 }
 
-- (void)testAlwaysHaveAtLeastOneSection {
+- (void)testAlwaysHaveAtLeastOneSection
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     [tableController loadTable];
 
@@ -269,42 +259,45 @@
 
 #pragma mark - Section Management
 
-- (void)testProperlyCountSections {
+- (void)testProperlyCountSections
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.sectionNameKeyPath = @"name";
     [tableController loadTable];
     assertThatInt(tableController.sectionCount, is(equalToInt(2)));
 }
 
-- (void)testProperlyCountRows {
+- (void)testProperlyCountRows
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     [tableController loadTable];
     assertThatInt([tableController rowCount], is(equalToInt(2)));
 }
 
-- (void)testProperlyCountRowsWithHeaderItems {
+- (void)testProperlyCountRowsWithHeaderItems
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -312,17 +305,18 @@
     assertThatInt([tableController rowCount], is(equalToInt(3)));
 }
 
-- (void)testProperlyCountRowsWithEmptyItemWhenEmpty {
+- (void)testProperlyCountRowsWithEmptyItemWhenEmpty
+{
     [self bootstrapEmptyStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -330,17 +324,18 @@
     assertThatInt([tableController rowCount], is(equalToInt(1)));
 }
 
-- (void)testProperlyCountRowsWithEmptyItemWhenFull {
+- (void)testProperlyCountRowsWithEmptyItemWhenFull
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -348,24 +343,25 @@
     assertThatInt([tableController rowCount], is(equalToInt(2)));
 }
 
-- (void)testProperlyCountRowsWithHeaderAndEmptyItemsWhenEmptyDontShowHeaders {
+- (void)testProperlyCountRowsWithHeaderAndEmptyItemsWhenEmptyDontShowHeaders
+{
     [self bootstrapEmptyStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
     tableController.showsHeaderRowsWhenEmpty = NO;
-    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -373,24 +369,22 @@
     assertThatInt([tableController rowCount], is(equalToInt(1)));
 }
 
-- (void)testProperlyCountRowsWithHeaderAndEmptyItemsWhenEmptyShowHeaders {
+- (void)testProperlyCountRowsWithHeaderAndEmptyItemsWhenEmptyShowHeaders
+{
     [self bootstrapEmptyStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
-    [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController = [RKFetchedResultsTableController tableControllerForTableViewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
     tableController.showsHeaderRowsWhenEmpty = YES;
-    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -398,23 +392,21 @@
     assertThatInt([tableController rowCount], is(equalToInt(2)));
 }
 
-- (void)testProperlyCountRowsWithHeaderAndEmptyItemsWhenFull {
+- (void)testProperlyCountRowsWithHeaderAndEmptyItemsWhenFull
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
-    [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController = [RKFetchedResultsTableController tableControllerForTableViewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -424,15 +416,16 @@
 
 #pragma mark - UITableViewDataSource specs
 
-- (void)testRaiseAnExceptionIfSentAMessageWithATableViewItIsNotBoundTo {
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController = [RKFetchedResultsTableController tableControllerWithTableView:tableView forViewController:viewController];
-    NSException* exception = nil;
+- (void)testRaiseAnExceptionIfSentAMessageWithATableViewItIsNotBoundTo
+{
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController = [RKFetchedResultsTableController tableControllerWithTableView:tableView forViewController:viewController];
+    NSException *exception = nil;
     @try {
         [tableController numberOfSectionsInTableView:[UITableView new]];
     }
-    @catch (NSException* e) {
+    @catch (NSException *e) {
         exception = e;
     }
     @finally {
@@ -440,13 +433,14 @@
     }
 }
 
-- (void)testReturnTheNumberOfSectionsInTableView {
+- (void)testReturnTheNumberOfSectionsInTableView
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.sectionNameKeyPath = @"name";
     [tableController loadTable];
@@ -454,26 +448,28 @@
     assertThatInt([tableController numberOfSectionsInTableView:tableView], is(equalToInt(2)));
 }
 
-- (void)testReturnTheNumberOfRowsInSectionInTableView {
+- (void)testReturnTheNumberOfRowsInSectionInTableView
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     [tableController loadTable];
 
     assertThatInt([tableController tableView:tableView numberOfRowsInSection:0], is(equalToInt(2)));
 }
 
-- (void)testReturnTheHeaderTitleForSection {
+- (void)testReturnTheHeaderTitleForSection
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.sectionNameKeyPath = @"name";
     [tableController loadTable];
@@ -481,106 +477,109 @@
     assertThat([tableController tableView:tableView titleForHeaderInSection:1], is(equalTo(@"other")));
 }
 
-- (void)testReturnTheTableViewCellForRowAtIndexPath {
+- (void)testReturnTheTableViewCellForRowAtIndexPath
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     [tableController loadTable];
 
-    RKTableViewCellMapping* cellMapping = [RKTableViewCellMapping mappingForClass:[UITableViewCell class]];
+    RKTableViewCellMapping *cellMapping = [RKTableViewCellMapping mappingForClass:[UITableViewCell class]];
     [cellMapping mapKeyPath:@"name" toAttribute:@"textLabel.text"];
-    RKTableViewCellMappings* mappings = [RKTableViewCellMappings new];
+    RKTableViewCellMappings *mappings = [RKTableViewCellMappings new];
     [mappings setCellMapping:cellMapping forClass:[RKHuman class]];
     tableController.cellMappings = mappings;
 
-    UITableViewCell* cell = [tableController tableView:tableController.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
+    UITableViewCell *cell = [tableController tableView:tableController.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
     assertThat(cell.textLabel.text, is(equalTo(@"blake")));
 }
 
 #pragma mark - Table Cell Mapping
 
-- (void)testReturnTheObjectForARowAtIndexPath {
+- (void)testReturnTheObjectForARowAtIndexPath
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     [tableController loadTable];
 
-    NSIndexPath* indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
-    RKHuman* blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
+    RKHuman *blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
     assertThatBool(blake == [tableController objectForRowAtIndexPath:indexPath], is(equalToBool(YES)));
+    [tableController release];
 }
 
 #pragma mark - Editing
 
-- (void)testFireADeleteRequestWhenTheCanEditRowsPropertyIsSet {
+- (void)testFireADeleteRequestWhenTheCanEditRowsPropertyIsSet
+{
     [self bootstrapStoreAndCache];
     [self stubObjectManagerToOnline];
     [[RKObjectManager sharedManager].router routeClass:[RKHuman class]
-                                        toResourcePath:@"/humans/(railsID)"
+                                        toResourcePath:@"/humans/:railsID"
                                              forMethod:RKRequestMethodDELETE];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
-    [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController = [RKFetchedResultsTableController tableControllerForTableViewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.canEditRows = YES;
+    RKTableViewCellMapping *cellMapping = [RKTableViewCellMapping cellMapping];
+    [cellMapping mapKeyPath:@"name" toAttribute:@"textLabel.text"];
+    [tableController mapObjectsWithClass:[RKHuman class] toTableCellsWithMapping:cellMapping];
     [tableController loadTable];
 
-    NSIndexPath* indexPath = [NSIndexPath indexPathForRow:1 inSection:0];
-    NSIndexPath* deleteIndexPath = [NSIndexPath indexPathForRow:0 inSection:0];
-    RKHuman* blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
-    RKHuman* other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:1 inSection:0];
+    NSIndexPath *deleteIndexPath = [NSIndexPath indexPathForRow:0 inSection:0];
+    RKHuman *blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
+    RKHuman *other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
 
     assertThatInt([tableController rowCount], is(equalToInt(2)));
     assertThat([tableController objectForRowAtIndexPath:indexPath], is(equalTo(other)));
     assertThat([tableController objectForRowAtIndexPath:deleteIndexPath], is(equalTo(blake)));
     BOOL delegateCanEdit = [tableController tableView:tableController.tableView
-                               canEditRowAtIndexPath:deleteIndexPath];
+                                canEditRowAtIndexPath:deleteIndexPath];
     assertThatBool(delegateCanEdit, is(equalToBool(YES)));
 
-//    RKTestNotificationObserver* observer = [RKTestNotificationObserver notificationObserverForNotificationName:RKRequestDidLoadResponseNotification];
     [RKTestNotificationObserver waitForNotificationWithName:RKRequestDidLoadResponseNotification usingBlock:^{
         [tableController tableView:tableController.tableView
-               commitEditingStyle:UITableViewCellEditingStyleDelete
-                forRowAtIndexPath:deleteIndexPath];
+                commitEditingStyle:UITableViewCellEditingStyleDelete
+                 forRowAtIndexPath:deleteIndexPath];
     }];
-//    observer.timeout = 30;
 
     assertThatInt([tableController rowCount], is(equalToInt(1)));
     assertThat([tableController objectForRowAtIndexPath:deleteIndexPath], is(equalTo(other)));
     assertThatBool([blake isDeleted], is(equalToBool(YES)));
 }
 
-- (void)testLocallyCommitADeleteWhenTheCanEditRowsPropertyIsSet {
+- (void)testLocallyCommitADeleteWhenTheCanEditRowsPropertyIsSet
+{
     [self bootstrapStoreAndCache];
     [self stubObjectManagerToOnline];
 
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.canEditRows = YES;
     [tableController loadTable];
 
-    NSIndexPath* indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
-    NSIndexPath* deleteIndexPath = [NSIndexPath indexPathForRow:1 inSection:0];
-    RKHuman* blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
-    RKHuman* other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
+    NSIndexPath *deleteIndexPath = [NSIndexPath indexPathForRow:1 inSection:0];
+    RKHuman *blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
+    RKHuman *other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
     blake.railsID = nil;
     other.railsID = nil;
 
-    NSError* error = nil;
+    NSError *error = nil;
     [blake.managedObjectContext save:&error];
     assertThat(error, is(nilValue()));
 
@@ -588,96 +587,99 @@
     assertThat([tableController objectForRowAtIndexPath:indexPath], is(equalTo(blake)));
     assertThat([tableController objectForRowAtIndexPath:deleteIndexPath], is(equalTo(other)));
     BOOL delegateCanEdit = [tableController tableView:tableController.tableView
-                               canEditRowAtIndexPath:deleteIndexPath];
+                                canEditRowAtIndexPath:deleteIndexPath];
     assertThatBool(delegateCanEdit, is(equalToBool(YES)));
     [tableController tableView:tableController.tableView
-           commitEditingStyle:UITableViewCellEditingStyleDelete
-            forRowAtIndexPath:deleteIndexPath];
+            commitEditingStyle:UITableViewCellEditingStyleDelete
+             forRowAtIndexPath:deleteIndexPath];
     assertThatInt([tableController rowCount], is(equalToInt(1)));
     assertThat([tableController objectForRowAtIndexPath:indexPath], is(equalTo(blake)));
 }
 
-- (void)testNotCommitADeletionWhenTheCanEditRowsPropertyIsNotSet {
+- (void)testNotCommitADeletionWhenTheCanEditRowsPropertyIsNotSet
+{
     [self bootstrapStoreAndCache];
     [self stubObjectManagerToOnline];
 
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     [tableController loadTable];
 
-    NSIndexPath* indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
-    RKHuman* blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
-    RKHuman* other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
+    RKHuman *blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
+    RKHuman *other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
 
     assertThatInt([tableController rowCount], is(equalToInt(2)));
     BOOL delegateCanEdit = [tableController tableView:tableController.tableView
-                               canEditRowAtIndexPath:indexPath];
+                                canEditRowAtIndexPath:indexPath];
     assertThatBool(delegateCanEdit, is(equalToBool(NO)));
     [tableController tableView:tableController.tableView
-           commitEditingStyle:UITableViewCellEditingStyleDelete
-            forRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]];
+            commitEditingStyle:UITableViewCellEditingStyleDelete
+             forRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]];
     assertThatInt([tableController rowCount], is(equalToInt(2)));
     assertThat([tableController objectForRowAtIndexPath:indexPath], is(equalTo(blake)));
     assertThat([tableController objectForRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]],
                is(equalTo(other)));
 }
 
-- (void)testDoNothingToCommitAnInsertionWhenTheCanEditRowsPropertyIsSet {
+- (void)testDoNothingToCommitAnInsertionWhenTheCanEditRowsPropertyIsSet
+{
     [self bootstrapStoreAndCache];
     [self stubObjectManagerToOnline];
 
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.canEditRows = YES;
     [tableController loadTable];
 
-    NSIndexPath* indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
-    RKHuman* blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
-    RKHuman* other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
+    RKHuman *blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
+    RKHuman *other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
 
     assertThatInt([tableController rowCount], is(equalToInt(2)));
     BOOL delegateCanEdit = [tableController tableView:tableController.tableView
-                               canEditRowAtIndexPath:indexPath];
+                                canEditRowAtIndexPath:indexPath];
     assertThatBool(delegateCanEdit, is(equalToBool(YES)));
     [tableController tableView:tableController.tableView
-           commitEditingStyle:UITableViewCellEditingStyleInsert
-            forRowAtIndexPath:[NSIndexPath indexPathForRow:2 inSection:0]];
+            commitEditingStyle:UITableViewCellEditingStyleInsert
+             forRowAtIndexPath:[NSIndexPath indexPathForRow:2 inSection:0]];
     assertThatInt([tableController rowCount], is(equalToInt(2)));
     assertThat([tableController objectForRowAtIndexPath:indexPath], is(equalTo(blake)));
     assertThat([tableController objectForRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]],
                is(equalTo(other)));
 }
 
-- (void)testNotMoveARowWhenTheCanMoveRowsPropertyIsSet {
+- (void)testNotMoveARowWhenTheCanMoveRowsPropertyIsSet
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.canMoveRows = YES;
     [tableController loadTable];
 
-    NSIndexPath* indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
-    RKHuman* blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
-    RKHuman* other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
+    RKHuman *blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
+    RKHuman *other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
 
     assertThatInt([tableController rowCount], is(equalToInt(2)));
     BOOL delegateCanMove = [tableController tableView:tableController.tableView
-                               canMoveRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
+                                canMoveRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
     assertThatBool(delegateCanMove, is(equalToBool(YES)));
     [tableController tableView:tableController.tableView
-           moveRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]
-                  toIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]];
+            moveRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]
+                   toIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]];
     assertThatInt([tableController rowCount], is(equalToInt(2)));
     assertThat([tableController objectForRowAtIndexPath:indexPath], is(equalTo(blake)));
     assertThat([tableController objectForRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]],
@@ -686,13 +688,14 @@
 
 #pragma mark - Header, Footer, and Empty Rows
 
-- (void)testDetermineIfASectionIndexIsAHeaderSection {
+- (void)testDetermineIfASectionIndexIsAHeaderSection
+{
     [self bootstrapEmptyStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     [tableController loadTable];
     assertThatBool([tableController isHeaderSection:0], is(equalToBool(YES)));
@@ -700,17 +703,18 @@
     assertThatBool([tableController isHeaderSection:2], is(equalToBool(NO)));
 }
 
-- (void)testDetermineIfARowIndexIsAHeaderRow {
+- (void)testDetermineIfARowIndexIsAHeaderRow
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -720,17 +724,18 @@
     assertThatBool([tableController isHeaderRow:2], is(equalToBool(NO)));
 }
 
-- (void)testDetermineIfASectionIndexIsAFooterSectionSingleSection {
+- (void)testDetermineIfASectionIndexIsAFooterSectionSingleSection
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -740,18 +745,19 @@
     assertThatBool([tableController isFooterSection:2], is(equalToBool(NO)));
 }
 
-- (void)testDetermineIfASectionIndexIsAFooterSectionMultipleSections {
+- (void)testDetermineIfASectionIndexIsAFooterSectionMultipleSections
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.sectionNameKeyPath = @"name";
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -761,17 +767,18 @@
     assertThatBool([tableController isFooterSection:2], is(equalToBool(NO)));
 }
 
-- (void)testDetermineIfARowIndexIsAFooterRow {
+- (void)testDetermineIfARowIndexIsAFooterRow
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -781,13 +788,14 @@
     assertThatBool([tableController isFooterRow:2], is(equalToBool(YES)));
 }
 
-- (void)testDetermineIfASectionIndexIsAnEmptySection {
+- (void)testDetermineIfASectionIndexIsAnEmptySection
+{
     [self bootstrapEmptyStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     [tableController loadTable];
     assertThatBool([tableController isEmptySection:0], is(equalToBool(YES)));
@@ -795,13 +803,14 @@
     assertThatBool([tableController isEmptySection:2], is(equalToBool(NO)));
 }
 
-- (void)testDetermineIfARowIndexIsAnEmptyRow {
+- (void)testDetermineIfARowIndexIsAnEmptyRow
+{
     [self bootstrapEmptyStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     [tableController loadTable];
     assertThatBool([tableController isEmptyRow:0], is(equalToBool(YES)));
@@ -809,17 +818,18 @@
     assertThatBool([tableController isEmptyRow:2], is(equalToBool(NO)));
 }
 
-- (void)testDetermineIfAnIndexPathIsAHeaderIndexPath {
+- (void)testDetermineIfAnIndexPathIsAHeaderIndexPath
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -832,17 +842,18 @@
     assertThatBool([tableController isHeaderIndexPath:[NSIndexPath indexPathForRow:2 inSection:1]], is(equalToBool(NO)));
 }
 
-- (void)testDetermineIfAnIndexPathIsAFooterIndexPath {
+- (void)testDetermineIfAnIndexPathIsAFooterIndexPath
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -855,17 +866,18 @@
     assertThatBool([tableController isFooterIndexPath:[NSIndexPath indexPathForRow:2 inSection:1]], is(equalToBool(NO)));
 }
 
-- (void)testDetermineIfAnIndexPathIsAnEmptyIndexPathSingleSectionEmptyItemOnly {
+- (void)testDetermineIfAnIndexPathIsAnEmptyIndexPathSingleSectionEmptyItemOnly
+{
     [self bootstrapEmptyStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -878,17 +890,18 @@
     assertThatBool([tableController isEmptyItemIndexPath:[NSIndexPath indexPathForRow:2 inSection:1]], is(equalToBool(NO)));
 }
 
-- (void)testConvertAnIndexPathForHeaderRows {
+- (void)testConvertAnIndexPathForHeaderRows
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -899,17 +912,18 @@
     assertThat([tableController fetchedResultsIndexPathForIndexPath:[NSIndexPath indexPathForRow:3 inSection:0]], is(equalTo([NSIndexPath indexPathForRow:2 inSection:0])));
 }
 
-- (void)testConvertAnIndexPathForFooterRowsSingleSection {
+- (void)testConvertAnIndexPathForFooterRowsSingleSection
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -919,18 +933,19 @@
     assertThat([tableController fetchedResultsIndexPathForIndexPath:[NSIndexPath indexPathForRow:2 inSection:0]], is(equalTo([NSIndexPath indexPathForRow:2 inSection:0])));
 }
 
-- (void)testConvertAnIndexPathForFooterRowsMultipleSections {
+- (void)testConvertAnIndexPathForFooterRowsMultipleSections
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.sectionNameKeyPath = @"name";
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -941,17 +956,18 @@
     assertThat([tableController fetchedResultsIndexPathForIndexPath:[NSIndexPath indexPathForRow:1 inSection:1]], is(equalTo([NSIndexPath indexPathForRow:1 inSection:1])));
 }
 
-- (void)testConvertAnIndexPathForEmptyRow {
+- (void)testConvertAnIndexPathForEmptyRow
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -962,23 +978,24 @@
     assertThat([tableController fetchedResultsIndexPathForIndexPath:[NSIndexPath indexPathForRow:3 inSection:0]], is(equalTo([NSIndexPath indexPathForRow:3 inSection:0])));
 }
 
-- (void)testConvertAnIndexPathForHeaderFooterRowsSingleSection {
+- (void)testConvertAnIndexPathForHeaderFooterRowsSingleSection
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -989,24 +1006,25 @@
     assertThat([tableController fetchedResultsIndexPathForIndexPath:[NSIndexPath indexPathForRow:3 inSection:0]], is(equalTo([NSIndexPath indexPathForRow:2 inSection:0])));
 }
 
-- (void)testConvertAnIndexPathForHeaderFooterRowsMultipleSections {
+- (void)testConvertAnIndexPathForHeaderFooterRowsMultipleSections
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.sectionNameKeyPath = @"name";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -1018,29 +1036,30 @@
     assertThat([tableController fetchedResultsIndexPathForIndexPath:[NSIndexPath indexPathForRow:2 inSection:1]], is(equalTo([NSIndexPath indexPathForRow:2 inSection:1])));
 }
 
-- (void)testConvertAnIndexPathForHeaderFooterEmptyRowsSingleSection {
+- (void)testConvertAnIndexPathForHeaderFooterEmptyRowsSingleSection
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -1052,30 +1071,31 @@
     assertThat([tableController fetchedResultsIndexPathForIndexPath:[NSIndexPath indexPathForRow:5 inSection:0]], is(equalTo([NSIndexPath indexPathForRow:4 inSection:0])));
 }
 
-- (void)testConvertAnIndexPathForHeaderFooterEmptyRowsMultipleSections {
+- (void)testConvertAnIndexPathForHeaderFooterEmptyRowsMultipleSections
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
     tableController.sectionNameKeyPath = @"name";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -1086,23 +1106,24 @@
     assertThat([tableController fetchedResultsIndexPathForIndexPath:[NSIndexPath indexPathForRow:2 inSection:1]], is(equalTo([NSIndexPath indexPathForRow:2 inSection:1])));
 }
 
-- (void)testConvertAnIndexPathForHeaderEmptyRows {
+- (void)testConvertAnIndexPathForHeaderEmptyRows
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -1112,17 +1133,18 @@
     assertThat([tableController fetchedResultsIndexPathForIndexPath:[NSIndexPath indexPathForRow:3 inSection:0]], is(equalTo([NSIndexPath indexPathForRow:2 inSection:0])));
 }
 
-- (void)testShowHeaderRows {
+- (void)testShowHeaderRows
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    RKTableItem* headerRow = [RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    RKTableItem *headerRow = [RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }];
@@ -1131,8 +1153,8 @@
     tableController.showsFooterRowsWhenEmpty = NO;
     [tableController loadTable];
 
-    RKHuman* blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
-    RKHuman* other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
+    RKHuman *blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
+    RKHuman *other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
 
     assertThatInt([tableController rowCount], is(equalToInt(3)));
     assertThat([tableController objectForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]], is(equalTo(headerRow)));
@@ -1141,17 +1163,18 @@
                is(equalTo(other)));
 }
 
-- (void)testShowFooterRows {
+- (void)testShowFooterRows
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    RKTableItem* footerRow = [RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    RKTableItem *footerRow = [RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }];
@@ -1160,8 +1183,8 @@
     tableController.showsFooterRowsWhenEmpty = NO;
     [tableController loadTable];
 
-    RKHuman* blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
-    RKHuman* other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
+    RKHuman *blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
+    RKHuman *other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
 
     assertThatInt([tableController rowCount], is(equalToInt(3)));
     assertThat([tableController objectForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]], is(equalTo(blake)));
@@ -1170,17 +1193,18 @@
                is(equalTo(footerRow)));
 }
 
-- (void)testHideHeaderRowsWhenEmptyWhenPropertyIsNotSet {
+- (void)testHideHeaderRowsWhenEmptyWhenPropertyIsNotSet
+{
     [self bootstrapEmptyStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -1193,17 +1217,18 @@
     assertThatBool(tableController.isEmpty, is(equalToBool(YES)));
 }
 
-- (void)testHideFooterRowsWhenEmptyWhenPropertyIsNotSet {
+- (void)testHideFooterRowsWhenEmptyWhenPropertyIsNotSet
+{
     [self bootstrapEmptyStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -1216,29 +1241,30 @@
     assertThatBool(tableController.isEmpty, is(equalToBool(YES)));
 }
 
-- (void)testRemoveHeaderAndFooterCountsWhenDeterminingIsEmpty {
+- (void)testRemoveHeaderAndFooterCountsWhenDeterminingIsEmpty
+{
     [self bootstrapEmptyStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -1251,34 +1277,35 @@
     assertThatBool(tableController.isEmpty, is(equalToBool(YES)));
 }
 
-- (void)testNotShowTheEmptyItemWhenTheTableIsNotEmpty {
+- (void)testNotShowTheEmptyItemWhenTheTableIsNotEmpty
+{
     [self bootstrapStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
 
-    RKTableItem* headerRow = [RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    RKTableItem *headerRow = [RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }];
     [tableController addHeaderRowForItem:headerRow];
 
-    RKTableItem* footerRow = [RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    RKTableItem *footerRow = [RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }];
     [tableController addFooterRowForItem:footerRow];
 
-    RKTableItem* emptyItem = [RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    RKTableItem *emptyItem = [RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }];
@@ -1287,8 +1314,8 @@
     tableController.showsFooterRowsWhenEmpty = NO;
     [tableController loadTable];
 
-    RKHuman* blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
-    RKHuman* other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
+    RKHuman *blake = [RKHuman findFirstByAttribute:@"name" withValue:@"blake"];
+    RKHuman *other = [RKHuman findFirstByAttribute:@"name" withValue:@"other"];
 
     assertThatInt([tableController rowCount], is(equalToInt(4)));
     assertThat([tableController objectForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]], is(equalTo(headerRow)));
@@ -1298,29 +1325,30 @@
                is(equalTo(footerRow)));
 }
 
-- (void)testShowTheEmptyItemWhenTheTableIsEmpty {
+- (void)testShowTheEmptyItemWhenTheTableIsEmpty
+{
     [self bootstrapEmptyStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -1333,29 +1361,30 @@
     assertThatBool(tableController.isEmpty, is(equalToBool(YES)));
 }
 
-- (void)testShowTheEmptyItemPlusHeadersAndFootersWhenTheTableIsEmpty {
+- (void)testShowTheEmptyItemPlusHeadersAndFootersWhenTheTableIsEmpty
+{
     [self bootstrapEmptyStoreAndCache];
-    UITableView* tableView = [UITableView new];
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController =
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
     [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                               viewController:viewController];
+                                                viewController:viewController];
     tableController.resourcePath = @"/JSON/humans/all.json";
-    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addHeaderRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Header";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController addFooterRowForItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Footer";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
-    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem* tableItem) {
+    [tableController setEmptyItem:[RKTableItem tableItemUsingBlock:^(RKTableItem *tableItem) {
         tableItem.text = @"Empty";
-        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping* cellMapping) {
+        tableItem.cellMapping = [RKTableViewCellMapping cellMappingUsingBlock:^(RKTableViewCellMapping *cellMapping) {
             [cellMapping addDefaultMappings];
         }];
     }]];
@@ -1368,15 +1397,16 @@
     assertThatBool(tableController.isEmpty, is(equalToBool(YES)));
 }
 
-- (void)testShowTheEmptyImageAfterLoadingAnEmptyCollectionIntoAnEmptyFetch {
+- (void)testShowTheEmptyImageAfterLoadingAnEmptyCollectionIntoAnEmptyFetch
+{
     [self bootstrapEmptyStoreAndCache];
     [self stubObjectManagerToOnline];
 
-    UITableView* tableView = [UITableView new];
+    UITableView *tableView = [UITableView new];
 
-    RKFetchedResultsTableControllerSpecViewController* viewController = [RKFetchedResultsTableControllerSpecViewController new];
-    RKFetchedResultsTableController* tableController = [[RKFetchedResultsTableController alloc] initWithTableView:tableView
-                                                                                                viewController:viewController];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController = [[RKFetchedResultsTableController alloc] initWithTableView:tableView
+                                                                                                   viewController:viewController];
 
     UIImage *image = [RKTestFixture imageWithContentsOfFixture:@"blake.png"];
 
@@ -1385,7 +1415,6 @@
     tableController.autoRefreshFromNetwork = YES;
     [tableController.cache invalidateAll];
 
-//    RKLogConfigureByName("RestKit/Network", RKLogLevelTrace);
     [RKTestNotificationObserver waitForNotificationWithName:RKTableControllerDidFinishLoadNotification usingBlock:^{
         [tableController loadTable];
     }];
@@ -1393,6 +1422,110 @@
     assertThatInt([tableController rowCount], is(equalToInt(0)));
     assertThatBool(tableController.isEmpty, is(equalToBool(YES)));
     assertThat(tableController.stateOverlayImageView.image, is(notNilValue()));
+}
+
+- (void)testPostANotificationWhenObjectsAreLoaded
+{
+    [self bootstrapNakedObjectStoreAndCache];
+    UITableView *tableView = [UITableView new];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
+    [[RKFetchedResultsTableController alloc] initWithTableView:tableView
+                                                viewController:viewController];
+    tableController.resourcePath = @"/JSON/NakedEvents.json";
+    [tableController setObjectMappingForClass:[RKEvent class]];
+
+    id observerMock = [OCMockObject observerMock];
+    [[NSNotificationCenter defaultCenter] addMockObserver:observerMock name:RKTableControllerDidLoadObjectsNotification object:tableController];
+    [[observerMock expect] notificationWithName:RKTableControllerDidLoadObjectsNotification object:tableController];
+    [tableController loadTable];
+    [observerMock verify];
+}
+
+#pragma mark - Delegate Methods
+
+- (void)testDelegateIsInformedOnInsertSection
+{
+    [self bootstrapStoreAndCache];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
+    [[RKFetchedResultsTableController alloc] initWithTableView:viewController.tableView viewController:viewController];
+    RKTableViewCellMapping *cellMapping = [RKTableViewCellMapping cellMapping];
+    [cellMapping mapKeyPath:@"name" toAttribute:@"textLabel.text"];
+    [tableController mapObjectsWithClass:[RKHuman class] toTableCellsWithMapping:cellMapping];
+    tableController.resourcePath = @"/JSON/humans/all.json";
+    tableController.cacheName = @"allHumansCache";
+
+    RKFetchedResultsTableControllerTestDelegate *delegate = [RKFetchedResultsTableControllerTestDelegate tableControllerDelegate];
+    id mockDelegate = [OCMockObject partialMockForObject:delegate];
+    [[mockDelegate expect] tableController:tableController didInsertSectionAtIndex:0];
+    tableController.delegate = mockDelegate;
+    [[[[UIApplication sharedApplication] windows] objectAtIndex:0] setRootViewController:viewController];
+    [tableController loadTable];
+    assertThatInt([tableController rowCount], is(equalToInt(2)));
+    assertThatInt([tableController sectionCount], is(equalToInt(1)));
+    [mockDelegate verify];
+}
+
+- (void)testDelegateIsInformedOfDidStartLoad
+{
+    [self bootstrapStoreAndCache];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
+    [[RKFetchedResultsTableController alloc] initWithTableView:viewController.tableView viewController:viewController];
+    RKTableViewCellMapping *cellMapping = [RKTableViewCellMapping cellMapping];
+    [cellMapping mapKeyPath:@"name" toAttribute:@"textLabel.text"];
+    [tableController mapObjectsWithClass:[RKHuman class] toTableCellsWithMapping:cellMapping];
+    tableController.resourcePath = @"/JSON/humans/all.json";
+    tableController.cacheName = @"allHumansCache";
+
+    id mockDelegate = [OCMockObject niceMockForProtocol:@protocol(RKFetchedResultsTableControllerDelegate)];
+    [[mockDelegate expect] tableControllerDidStartLoad:tableController];
+    tableController.delegate = mockDelegate;
+    [[[[UIApplication sharedApplication] windows] objectAtIndex:0] setRootViewController:viewController];
+    [tableController loadTable];
+    [mockDelegate verify];
+}
+
+- (void)testDelegateIsInformedOfDidFinishLoad
+{
+    [self bootstrapStoreAndCache];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
+    [[RKFetchedResultsTableController alloc] initWithTableView:viewController.tableView viewController:viewController];
+    RKTableViewCellMapping *cellMapping = [RKTableViewCellMapping cellMapping];
+    [cellMapping mapKeyPath:@"name" toAttribute:@"textLabel.text"];
+    [tableController mapObjectsWithClass:[RKHuman class] toTableCellsWithMapping:cellMapping];
+    tableController.resourcePath = @"/JSON/humans/all.json";
+    tableController.cacheName = @"allHumansCache";
+
+    id mockDelegate = [OCMockObject niceMockForProtocol:@protocol(RKFetchedResultsTableControllerDelegate)];
+    [[mockDelegate expect] tableControllerDidFinishLoad:tableController];
+    tableController.delegate = mockDelegate;
+    [[[[UIApplication sharedApplication] windows] objectAtIndex:0] setRootViewController:viewController];
+    [tableController loadTable];
+    [mockDelegate verify];
+}
+
+- (void)testDelegateIsInformedOfDidInsertObjectAtIndexPath
+{
+    [self bootstrapStoreAndCache];
+    RKFetchedResultsTableControllerSpecViewController *viewController = [RKFetchedResultsTableControllerSpecViewController new];
+    RKFetchedResultsTableController *tableController =
+    [[RKFetchedResultsTableController alloc] initWithTableView:viewController.tableView viewController:viewController];
+    RKTableViewCellMapping *cellMapping = [RKTableViewCellMapping cellMapping];
+    [cellMapping mapKeyPath:@"name" toAttribute:@"textLabel.text"];
+    [tableController mapObjectsWithClass:[RKHuman class] toTableCellsWithMapping:cellMapping];
+    tableController.resourcePath = @"/JSON/humans/all.json";
+    tableController.cacheName = @"allHumansCache";
+
+    id mockDelegate = [OCMockObject niceMockForProtocol:@protocol(RKFetchedResultsTableControllerDelegate)];
+    [[mockDelegate expect] tableController:tableController didInsertObject:OCMOCK_ANY atIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
+    [[mockDelegate expect] tableController:tableController didInsertObject:OCMOCK_ANY atIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]];
+    tableController.delegate = mockDelegate;
+    [[[[UIApplication sharedApplication] windows] objectAtIndex:0] setRootViewController:viewController];
+    [tableController loadTable];
+    [mockDelegate verify];
 }
 
 @end

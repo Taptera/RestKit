@@ -4,13 +4,13 @@
 //
 //  Created by Blake Watters on 4/30/11.
 //  Copyright (c) 2009-2012 RestKit. All rights reserved.
-//  
+//
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
 //  You may obtain a copy of the License at
-//  
+//
 //  http://www.apache.org/licenses/LICENSE-2.0
-//  
+//
 //  Unless required by applicable law or agreed to in writing, software
 //  distributed under the License is distributed on an "AS IS" BASIS,
 //  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -45,13 +45,7 @@ relationship. Relationships are processed using an object mapping as well.
  */
 @interface RKObjectMapping : RKObjectMappingDefinition <NSCopying> {
     Class _objectClass;
-    NSMutableArray* _mappings;
-    NSString* _rootKeyPath;
-    BOOL _setDefaultValueForMissingAttributes;
-    BOOL _setNilForMissingRelationships;
-    BOOL _performKeyValueValidation;
-    NSArray *_dateFormatters;
-    NSFormatter *_preferredDateFormatter;
+    NSMutableArray *_mappings;
 }
 
 /**
@@ -100,8 +94,8 @@ relationship. Relationships are processed using an object mapping as well.
 @property (nonatomic, assign) BOOL setNilForMissingRelationships;
 
 /**
- When YES, RestKit will invoke key-value validation at object mapping time. 
- 
+ When YES, RestKit will invoke key-value validation at object mapping time.
+
  **Default**: YES
  @see validateValue:forKey:error:
  */
@@ -125,10 +119,10 @@ relationship. Relationships are processed using an object mapping as well.
  into NSDate attributes on the target objectClass. Each date formatter
  will be invoked with the string value being mapped until one of the date
  formatters does not return nil.
- 
+
  Defaults to the application-wide collection of date formatters configured via:
  [RKObjectMapping setDefaultDateFormatters:]
- 
+
  @see [RKObjectMapping defaultDateFormatters]
  */
 @property (nonatomic, retain) NSArray *dateFormatters;
@@ -138,10 +132,10 @@ relationship. Relationships are processed using an object mapping as well.
  and time configuration. This date formatter will be used when generating
  string representations of NSDate attributes (i.e. during serialization to
  URL form encoded or JSON format).
- 
+
  Defaults to the application-wide preferred date formatter configured via:
  [RKObjectMapping setPreferredDateFormatter:]
- 
+
  @see [RKObjectMapping preferredDateFormatter]
  */
 @property (nonatomic, retain) NSFormatter *preferredDateFormatter;
@@ -172,12 +166,12 @@ relationship. Relationships are processed using an object mapping as well.
  Returns an object mapping targeting the specified class. The RKObjectMapping instance will
  be yieled to the block so that you can perform on the fly configuration without having to
  obtain a reference variable for the mapping.
- 
- For example, consider we have a one-off request that will load a few attributes for our object. 
+
+ For example, consider we have a one-off request that will load a few attributes for our object.
  Using blocks, this is very succinct:
- 
-    [[RKObjectManager sharedManager] postObject:self usingBlock:^(RKObjectLoader* loader) {
-        loader.objectMapping = [RKObjectMapping mappingForClass:[Person class] usingBlock:^(RKObjectMapping* mapping) {
+
+    [[RKObjectManager sharedManager] postObject:self usingBlock:^(RKObjectLoader *loader) {
+        loader.objectMapping = [RKObjectMapping mappingForClass:[Person class] usingBlock:^(RKObjectMapping *mapping) {
             [mapping mapAttributes:@"email", @"first_name", nil];
         }];
     }];
@@ -188,21 +182,21 @@ relationship. Relationships are processed using an object mapping as well.
  Returns serialization mapping for encoding a local object to a dictionary for transport. The RKObjectMapping instance will
  be yieled to the block so that you can perform on the fly configuration without having to
  obtain a reference variable for the mapping.
- 
+
  For example, consider we have a one-off request within which we want to post a subset of our object
  data. Using blocks, this is very succinct:
- 
-    - (BOOL)changePassword:(NSString*)newPassword error:(NSError**)error {
+
+    - (BOOL)changePassword:(NSString *)newPassword error:(NSError **)error {
         if ([self validatePassword:newPassword error:error]) {
             self.password = newPassword;
-            [[RKObjectManager sharedManager] putObject:self delegate:self block:^(RKObjectLoader* loader) {
-                loader.serializationMapping = [RKObjectMapping serializationMappingUsingBlock:^(RKObjectMapping* mapping) {
+            [[RKObjectManager sharedManager] putObject:self delegate:self block:^(RKObjectLoader *loader) {
+                loader.serializationMapping = [RKObjectMapping serializationMappingUsingBlock:^(RKObjectMapping *mapping) {
                     [mapping mapAttributes:@"password", nil];
                 }];
             }];
         }
     }
- 
+
  Using the block forms we are able to quickly configure and send this request on the fly.
  */
 + (id)serializationMappingUsingBlock:(void (^)(RKObjectMapping *serializationMapping))block;
@@ -213,14 +207,14 @@ relationship. Relationships are processed using an object mapping as well.
 
  @see RKObjectAttributeMapping
  */
-- (void)addAttributeMapping:(RKObjectAttributeMapping*)mapping;
+- (void)addAttributeMapping:(RKObjectAttributeMapping *)mapping;
 
 /**
  Add a configured attribute mapping to this object mapping
 
  @see RKObjectRelationshipMapping
  */
-- (void)addRelationshipMapping:(RKObjectRelationshipMapping*)mapping;
+- (void)addRelationshipMapping:(RKObjectRelationshipMapping *)mapping;
 
 #pragma mark - Retrieving Mappings
 
@@ -230,7 +224,7 @@ relationship. Relationships are processed using an object mapping as well.
  @param sourceKeyPath A keyPath within the mappable source object that is mapped to an
  attribute or relationship in this object mapping.
  */
-- (id)mappingForKeyPath:(NSString*)sourceKeyPath;
+- (id)mappingForKeyPath:(NSString *)sourceKeyPath;
 
 /**
  Returns the attribute or relationship mapping for the given source keyPath.
@@ -238,11 +232,11 @@ relationship. Relationships are processed using an object mapping as well.
  @param sourceKeyPath A keyPath within the mappable source object that is mapped to an
  attribute or relationship in this object mapping.
  */
-- (id)mappingForSourceKeyPath:(NSString*)sourceKeyPath;
+- (id)mappingForSourceKeyPath:(NSString *)sourceKeyPath;
 
 /**
  Returns the attribute or relationship mapping for the given destination keyPath.
- 
+
  @param destinationKeyPath A keyPath on the destination object that is currently
  */
 - (id)mappingForDestinationKeyPath:(NSString *)destinationKeyPath;
@@ -259,7 +253,7 @@ relationship. Relationships are processed using an object mapping as well.
 
  @param relationshipKey The name of the relationship we want to retrieve the mapping for
  */
-- (RKObjectRelationshipMapping*)mappingForRelationship:(NSString*)relationshipKey;
+- (RKObjectRelationshipMapping *)mappingForRelationship:(NSString *)relationshipKey;
 
 #pragma mark - Attribute & Relationship Mapping
 
@@ -283,15 +277,15 @@ relationship. Relationships are processed using an object mapping as well.
 /**
  Defines an attribute mapping for each string attribute in the collection where the source keyPath and the
  destination attribute property have the same name.
- 
+
  For example, given the transformation from a JSON dictionary:
- 
+
     {"name": "My Name", "age": 28}
- 
+
  To a Person class with corresponding name &amp; age properties, we could configure the attribute mappings via:
- 
+
     [mapping mapAttributesFromSet:[NSSet setWithObjects:@"name", @"age", nil]];
- 
+
  @param set A set of string attribute keyPaths to deifne mappings for
  */
 - (void)mapAttributesFromSet:(NSSet *)set;
@@ -299,15 +293,15 @@ relationship. Relationships are processed using an object mapping as well.
 /**
  Defines an attribute mapping for each string attribute in the collection where the source keyPath and the
  destination attribute property have the same name.
- 
+
  For example, given the transformation from a JSON dictionary:
- 
+
     {"name": "My Name", "age": 28}
- 
+
  To a Person class with corresponding name &amp; age properties, we could configure the attribute mappings via:
- 
+
     [mapping mapAttributesFromSet:[NSArray arrayWithObjects:@"name", @"age", nil]];
- 
+
  @param array An array of string attribute keyPaths to deifne mappings for
  */
 - (void)mapAttributesFromArray:(NSArray *)set;
@@ -322,14 +316,14 @@ relationship. Relationships are processed using an object mapping as well.
 
  To a Person class with corresponding 'cat' relationship property, we could configure the mappings via:
 
-     RKObjectMapping* catMapping = [RKObjectMapping mappingForClass:[Cat class]];
+     RKObjectMapping *catMapping = [RKObjectMapping mappingForClass:[Cat class]];
      [personMapping mapRelationship:@"cat" withObjectMapping:catMapping];
 
  @param relationshipKey A key-value coding key corresponding to a value in the mappable source object and a property
     on the destination class that have the same name.
  @param objectOrDynamicMapping An RKObjectMapping or RKObjectDynamic mapping to apply when mapping the relationship
  */
-- (void)mapRelationship:(NSString*)relationshipKey withMapping:(RKObjectMappingDefinition *)objectOrDynamicMapping;
+- (void)mapRelationship:(NSString *)relationshipKey withMapping:(RKObjectMappingDefinition *)objectOrDynamicMapping;
 
 /**
  Syntactic sugar to improve readability when defining a relationship mapping. Implies that the mapping
@@ -337,7 +331,7 @@ relationship. Relationships are processed using an object mapping as well.
 
  @see mapRelationship:withObjectMapping:
  */
-- (void)hasMany:(NSString*)keyPath withMapping:(RKObjectMappingDefinition *)objectOrDynamicMapping;
+- (void)hasMany:(NSString *)keyPath withMapping:(RKObjectMappingDefinition *)objectOrDynamicMapping;
 
 /**
  Syntactic sugar to improve readability when defining a relationship mapping. Implies that the mapping
@@ -345,7 +339,7 @@ relationship. Relationships are processed using an object mapping as well.
 
  @see mapRelationship:withObjectMapping:
  */
-- (void)hasOne:(NSString*)keyPath withMapping:(RKObjectMappingDefinition *)objectOrDynamicMapping;
+- (void)hasOne:(NSString *)keyPath withMapping:(RKObjectMappingDefinition *)objectOrDynamicMapping;
 
 /**
  Instantiate and add an RKObjectAttributeMapping instance targeting a keyPath within the mappable
@@ -365,7 +359,7 @@ relationship. Relationships are processed using an object mapping as well.
  @param destinationAttribute The attribute name to assign the mapped value to
  @see RKObjectAttributeMapping
  */
-- (void)mapKeyPath:(NSString*)sourceKeyPath toAttribute:(NSString*)destinationAttribute;
+- (void)mapKeyPath:(NSString *)sourceKeyPath toAttribute:(NSString *)destinationAttribute;
 
 /**
  Instantiate and add an RKObjectRelationshipMapping instance targeting a keyPath within the mappable
@@ -386,7 +380,7 @@ relationship. Relationships are processed using an object mapping as well.
  @param objectMapping An object mapping to use when processing the nested objects
  @see RKObjectRelationshipMapping
  */
-- (void)mapKeyPath:(NSString *)sourceKeyPath toRelationship:(NSString*)destinationRelationship withMapping:(RKObjectMappingDefinition *)objectOrDynamicMapping;
+- (void)mapKeyPath:(NSString *)sourceKeyPath toRelationship:(NSString *)destinationRelationship withMapping:(RKObjectMappingDefinition *)objectOrDynamicMapping;
 
 /**
  Instantiate and add an RKObjectRelationshipMapping instance targeting a keyPath within the mappable
@@ -401,7 +395,7 @@ relationship. Relationships are processed using an object mapping as well.
 
  @see mapKeyPath:toRelationship:withObjectMapping:
  */
-- (void)mapKeyPath:(NSString *)relationshipKeyPath toRelationship:(NSString*)keyPath withMapping:(RKObjectMappingDefinition *)objectOrDynamicMapping serialize:(BOOL)serialize;
+- (void)mapKeyPath:(NSString *)relationshipKeyPath toRelationship:(NSString *)keyPath withMapping:(RKObjectMappingDefinition *)objectOrDynamicMapping serialize:(BOOL)serialize;
 
 /**
  Quickly define a group of attribute mappings using alternating keyPath and attribute names. You must provide
@@ -413,7 +407,7 @@ relationship. Relationships are processed using an object mapping as well.
  @param sourceKeyPath A key-value coding key path to fetch a mappable value from
  @param ... A nil-terminated sequence of strings alternating between source key paths and destination attributes
  */
-- (void)mapKeyPathsToAttributes:(NSString*)sourceKeyPath, ... NS_REQUIRES_NIL_TERMINATION;
+- (void)mapKeyPathsToAttributes:(NSString *)sourceKeyPath, ... NS_REQUIRES_NIL_TERMINATION;
 
 
 /**
@@ -430,7 +424,7 @@ relationship. Relationships are processed using an object mapping as well.
 
  We can configure our mappings to handle this in the following form:
 
-    RKObjectMapping* mapping = [RKObjectMapping mappingForClass:[User class]];
+    RKObjectMapping *mapping = [RKObjectMapping mappingForClass:[User class]];
     mapping.forceCollectionMapping = YES; // RestKit cannot infer this is a collection, so we force it
     [mapping mapKeyOfNestedDictionaryToAttribute:@"firstName"];
     [mapping mapFromKeyPath:@"(firstName).id" toAttribute:"userID"];
@@ -443,7 +437,7 @@ relationship. Relationships are processed using an object mapping as well.
 /**
  Returns the attribute mapping targeting the key of a nested dictionary in the source JSON.
  This attribute mapping corresponds to the attributeName configured via mapKeyOfNestedDictionaryToAttribute:
- 
+
  @see mapKeyOfNestedDictionaryToAttribute:
  @returns An attribute mapping for the key of a nested dictionary being mapped or nil
  */
@@ -459,14 +453,14 @@ relationship. Relationships are processed using an object mapping as well.
 
  @param attributeOrRelationshipMapping The attribute or relationship mapping to remove
  */
-- (void)removeMapping:(RKObjectAttributeMapping*)attributeOrRelationshipMapping;
+- (void)removeMapping:(RKObjectAttributeMapping *)attributeOrRelationshipMapping;
 
 /**
  Remove the attribute or relationship mapping for the specified source keyPath
 
  @param sourceKeyPath A key-value coding key path to remove the mappings for
  */
-- (void)removeMappingForKeyPath:(NSString*)sourceKeyPath;
+- (void)removeMappingForKeyPath:(NSString *)sourceKeyPath;
 
 #pragma mark - Inverse Mappings
 
@@ -475,7 +469,7 @@ relationship. Relationships are processed using an object mapping as well.
  quickly generate a corresponding serialization mapping from a configured object mapping. The inverse
  mapping will have the source and destination keyPaths swapped for all attribute and relationship mappings.
  */
-- (RKObjectMapping*)inverseMapping;
+- (RKObjectMapping *)inverseMapping;
 
 /**
  Returns the default value to be assigned to the specified attribute when it is missing from a
@@ -486,7 +480,7 @@ relationship. Relationships are processed using an object mapping as well.
 
  @see [RKManagedObjectMapping defaultValueForMissingAttribute:]
  */
-- (id)defaultValueForMissingAttribute:(NSString*)attributeName;
+- (id)defaultValueForMissingAttribute:(NSString *)attributeName;
 
 /**
  Returns an auto-released object that can be used to apply this object mapping
@@ -498,25 +492,18 @@ relationship. Relationships are processed using an object mapping as well.
 
 /**
  Returns the class of the attribute or relationship property of the target objectClass
- 
+
  Given the name of a string property, this will return an NSString, etc.
- 
+
  @param propertyName The name of the property we would like to retrieve the type of
  */
-- (Class)classForProperty:(NSString*)propertyName;
+- (Class)classForProperty:(NSString *)propertyName;
 
-/**
- Returns an auto-released object that can be used to apply this object mapping
- given a set of mappable data. For transient objects, this generally returns an
- instance of the objectClass. For Core Data backed persistent objects, mappableData
- will be inspected to search for primary key data to lookup existing object instances.
- */
-- (id)mappableObjectForData:(id)mappableData;
 
 // Deprecations
-+ (id)mappingForClass:(Class)objectClass withBlock:(void (^)(RKObjectMapping*))block DEPRECATED_ATTRIBUTE;
-+ (id)mappingForClass:(Class)objectClass block:(void (^)(RKObjectMapping*))block DEPRECATED_ATTRIBUTE;
-+ (id)serializationMappingWithBlock:(void (^)(RKObjectMapping*))block DEPRECATED_ATTRIBUTE;
++ (id)mappingForClass:(Class)objectClass withBlock:(void (^)(RKObjectMapping *))block DEPRECATED_ATTRIBUTE;
++ (id)mappingForClass:(Class)objectClass block:(void (^)(RKObjectMapping *))block DEPRECATED_ATTRIBUTE;
++ (id)serializationMappingWithBlock:(void (^)(RKObjectMapping *))block DEPRECATED_ATTRIBUTE;
 
 @end
 
@@ -534,12 +521,12 @@ relationship. Relationships are processed using an object mapping as well.
 /**
  Returns the collection of default date formatters that will be used for all object mappings
  that have not been configured specifically.
- 
+
  Out of the box, RestKit initializes the following default date formatters for you in the
  UTC time zone:
     * yyyy-MM-dd'T'HH:mm:ss'Z'
     * MM/dd/yyyy
- 
+
  @return An array of NSFormatter objects used when mapping strings into NSDate attributes
  */
 + (NSArray *)defaultDateFormatters;
@@ -548,7 +535,7 @@ relationship. Relationships are processed using an object mapping as well.
  Sets the collection of default date formatters to the specified array. The array should
  contain configured instances of NSDateFormatter in the order in which you want them applied
  during object mapping operations.
- 
+
  @param dateFormatters An array of date formatters to replace the existing defaults
  @see defaultDateFormatters
  */
@@ -556,7 +543,7 @@ relationship. Relationships are processed using an object mapping as well.
 
 /**
  Adds a date formatter instance to the default collection
- 
+
  @param dateFormatter An NSFormatter object to append to the end of the default formatters collection
  @see defaultDateFormatters
  */
@@ -565,7 +552,7 @@ relationship. Relationships are processed using an object mapping as well.
 /**
  Convenience method for quickly constructing a date formatter and adding it to the collection of default
  date formatters. The locale is auto-configured to en_US_POSIX
- 
+
  @param dateFormatString The dateFormat string to assign to the newly constructed NSDateFormatter instance
  @param nilOrTimeZone The NSTimeZone object to configure on the NSDateFormatter instance. Defaults to UTC time.
  @result A new NSDateFormatter will be appended to the defaultDateFormatters with the specified date format and time zone
@@ -577,9 +564,9 @@ relationship. Relationships are processed using an object mapping as well.
  Returns the preferred date formatter to use when generating NSString representations from NSDate attributes.
  This type of transformation occurs when RestKit is mapping local objects into JSON or form encoded serializations
  that do not have a native time construct.
- 
+
  Defaults to a date formatter configured for the UTC Time Zone with a format string of "yyyy-MM-dd HH:mm:ss Z"
- 
+
  @return The preferred NSFormatter object to use when serializing dates into strings
  */
 + (NSFormatter *)preferredDateFormatter;
@@ -588,7 +575,7 @@ relationship. Relationships are processed using an object mapping as well.
  Sets the preferred date formatter to use when generating NSString representations from NSDate attributes.
  This type of transformation occurs when RestKit is mapping local objects into JSON or form encoded serializations
  that do not have a native time construct.
- 
+
  @param dateFormatter The NSFormatter object to designate as the new preferred instance
  */
 + (void)setPreferredDateFormatter:(NSFormatter *)dateFormatter;

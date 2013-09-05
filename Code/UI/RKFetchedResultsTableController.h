@@ -22,18 +22,28 @@
 
 typedef UIView *(^RKFetchedResultsTableViewViewForHeaderInSectionBlock)(NSUInteger sectionIndex, NSString *sectionTitle);
 
+@class RKFetchedResultsTableController;
+@protocol RKFetchedResultsTableControllerDelegate <RKAbstractTableControllerDelegate>
+
+@optional
+
+// Sections
+- (void)tableController:(RKFetchedResultsTableController *)tableController didInsertSectionAtIndex:(NSUInteger)sectionIndex;
+- (void)tableController:(RKFetchedResultsTableController *)tableController didDeleteSectionAtIndex:(NSUInteger)sectionIndex;
+
+@end
+
 /**
- Instances of RKFetchedResultsTableController provide an interface for driving a UITableView 
+ Instances of RKFetchedResultsTableController provide an interface for driving a UITableView
  */
 @interface RKFetchedResultsTableController : RKAbstractTableController <NSFetchedResultsControllerDelegate> {
 @private
-    NSFetchedResultsController *_fetchedResultsController;
-    BOOL _showsSectionIndexTitles;
     NSArray *_arraySortedFetchedObjects;
     BOOL _isEmptyBeforeAnimation;
 }
 
-@property (nonatomic, readonly) NSFetchedResultsController *fetchedResultsController;
+@property (nonatomic, assign) id<RKFetchedResultsTableControllerDelegate> delegate;
+@property (nonatomic, retain, readonly) NSFetchedResultsController *fetchedResultsController;
 @property (nonatomic, copy) NSString *resourcePath;
 @property (nonatomic, retain) NSFetchRequest *fetchRequest;
 @property (nonatomic, assign) CGFloat heightForHeaderInSection;

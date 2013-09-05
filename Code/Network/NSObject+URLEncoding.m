@@ -11,14 +11,15 @@
 
 @implementation NSObject (URLEncoding)
 
-- (NSString*)URLEncodedString {
-	NSString *string = [NSString stringWithFormat:@"%@", self];
-	NSString *encodedString = (NSString*)CFURLCreateStringByAddingPercentEscapes(NULL,
-																				 (CFStringRef)string,
-																				 NULL,
-																				 (CFStringRef)@"!*'();:@&=+$,/?%#[]",
-																				 kCFStringEncodingUTF8);
-	return [encodedString autorelease];
+- (NSString *)URLEncodedString
+{
+    NSString *string = [NSString stringWithFormat:@"%@", self];
+    NSString *encodedString = (NSString *)CFURLCreateStringByAddingPercentEscapes(NULL,
+                                                                                 (CFStringRef)string,
+                                                                                 NULL,
+                                                                                 (CFStringRef)@"!*'();:@&=+$,/?%#[]",
+                                                                                 kCFStringEncodingUTF8);
+    return [encodedString autorelease];
 }
 
 @end

@@ -16,19 +16,21 @@ NSURL *gRKCatalogBaseURL = nil;
 @synthesize window;
 @synthesize navigationController;
 
-- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
+{
     // Override point for customization after application launch.
     // Add the navigation controller's view to the window and display.
     self.window.rootViewController = self.navigationController;
     [self.window makeKeyAndVisible];
-    
-    
+
+
     gRKCatalogBaseURL = [[NSURL alloc] initWithString:@"http://rkcatalog.heroku.com"];
-    
+
     return YES;
 }
 
-- (void)dealloc {
+- (void)dealloc
+{
     [window release];
     [navigationController release];
     [super dealloc];
