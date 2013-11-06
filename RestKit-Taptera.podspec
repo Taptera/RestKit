@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name         =  'RestKit-Taptera'
-  s.version      =  '0.10.3'
+  s.version      =  '0.10.4'
   s.summary      =  'RestKit is a framework for consuming and modeling RESTful web resources on iOS and OS X.'
   s.homepage     =  'http://www.restkit.org'
   s.author       =  { 'Blake Watters' => 'blakewatters@gmail.com' }

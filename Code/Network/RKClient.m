@@ -312,10 +312,11 @@ NSString *RKPathAppendQueryParams(NSString *resourcePath, NSDictionary *queryPar
     // Don't crash if baseURL is nil'd out (i.e. dealloc)
     if (! [newBaseURL isEqual:[NSNull null]]) {
         // Configure a cache for the new base URL
-        [_requestCache release];
-        _requestCache = [[RKRequestCache alloc] initWithPath:[self cachePath]
+        @synchronized(self){
+            [_requestCache release];
+            _requestCache = [[RKRequestCache alloc] initWithPath:[self cachePath]
                                                     storagePolicy:RKRequestCacheStoragePolicyPermanently];
-
+        }
         // Determine reachability strategy (if user has not already done so)
         if (self.reachabilityObserver == nil) {
             NSString *hostName = [newBaseURL host];
