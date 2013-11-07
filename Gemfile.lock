@@ -1,88 +1,123 @@
 GIT
   remote: git://github.com/RestKit/RestKit-Gem.git
-  revision: 96058139a46c46aa344c1481e8c75b390c82d5e9
+  revision: 7ed1812d31055d3e162f8128e8975573abcbf962
   specs:
     restkit (0.0.0)
 
 GIT
   remote: git://github.com/rayh/xcoder.git
-  revision: e400000f29d959932cae2558fc77fd9ace13ead0
+  revision: 8e7d8ef91f3e2d77152357c5353fa55026ff308a
   specs:
-    xcoder (0.1.12)
+    xcoder (0.1.19)
+      aws-sdk
       builder
-      json
+      colorize
+      multi_json
       nokogiri
       plist
       rest-client
 
 GIT
   remote: git://github.com/sinatra/sinatra.git
-  revision: cab56ed7d64b9ffb6d4df48cb8d7d3153890f3ee
+  revision: 257f49910dffbfde762b4e332fa3786b1a4dd265
   specs:
-    sinatra (1.4.0)
-      rack (~> 1.3, >= 1.3.6)
-      rack-protection (~> 1.2)
-      tilt (~> 1.3, >= 1.3.3)
+    sinatra (1.4.4)
+      rack (~> 1.4)
+      rack-protection (~> 1.4)
+      tilt (~> 1.3, >= 1.3.4)
 
 GIT
   remote: https://github.com/assaf/rack-oauth2-server.git
-  revision: 8c03cdb4cbaf49fdd3d227d8a84a2486261818f8
+  revision: 91c0dd8a57754b37bbb779b95233b502129def75
   specs:
-    rack-oauth2-server (2.6.0)
+    rack-oauth2-server (2.8.1)
       bson_ext
+      iconv
       json
-      jwt (~> 0.1.4)
+      jwt (~> 0.1.8)
       mongo (~> 1)
-      rack (~> 1.1)
-      sinatra (~> 1.1)
+      rack (~> 1.4.5)
+      sinatra (~> 1.3)
 
 GIT
   remote: https://github.com/laserlemon/simple_oauth.git
-  revision: e1146b615df769bfe7824a337122069cc2d5476d
+  revision: f60702269d9d6dee322a904ce02645533ddd1a8d
   specs:
-    simple_oauth (0.1.8)
+    simple_oauth (0.2.0)
 
 GEM
   remote: http://rubygems.org/
   specs:
+    activesupport (3.2.15)
+      i18n (~> 0.6, >= 0.6.4)
+      multi_json (~> 1.0)
     archive-tar-minitar (0.5.2)
-    bson (1.6.2)
-    bson_ext (1.6.2)
-      bson (~> 1.6.2)
-    builder (3.0.0)
+    aws-sdk (1.11.1)
+      json (~> 1.4)
+      nokogiri (>= 1.4.4)
+      uuidtools (~> 2.1)
+    bson (1.9.2)
+    bson_ext (1.9.2)
+      bson (~> 1.9.2)
+    builder (3.2.2)
+    claide (0.3.2)
+    cocoapods (0.25.0)
+      activesupport (~> 3.0)
+      claide (~> 0.3.2)
+      cocoapods-core (= 0.25.0)
+      cocoapods-downloader (~> 0.2.0)
+      colored (~> 1.2)
+      escape (~> 0.0.4)
+      json (~> 1.8)
+      open4 (~> 1.3)
+      xcodeproj (~> 0.11.0)
+    cocoapods-core (0.25.0)
+      activesupport (~> 3.0)
+      json (~> 1.8)
+      nap (~> 0.5)
+    cocoapods-downloader (0.2.0)
+    colored (1.2)
+    colorize (0.6.0)
     columnize (0.3.6)
-    daemons (1.1.8)
-    diff-lcs (1.1.3)
-    eventmachine (0.12.10)
+    daemons (1.1.9)
+    diff-lcs (1.2.4)
+    escape (0.0.4)
+    eventmachine (1.0.3)
     faker (1.0.1)
       i18n (~> 0.4)
-    i18n (0.6.0)
-    json (1.7.3)
-    jwt (0.1.4)
-      json (>= 1.2.4)
+    i18n (0.6.5)
+    iconv (1.0.3)
+    json (1.8.1)
+    jwt (0.1.8)
+      multi_json (>= 1.5)
     linecache19 (0.5.12)
       ruby_core_source (>= 0.1.4)
-    mime-types (1.18)
-    mongo (1.6.2)
-      bson (~> 1.6.2)
-    nokogiri (1.5.2)
+    mime-types (2.0)
+    mini_portile (0.5.2)
+    mongo (1.9.2)
+      bson (~> 1.9.2)
+    multi_json (1.8.2)
+    nap (0.5.1)
+    nokogiri (1.6.0)
+      mini_portile (~> 0.5.0)
+    open4 (1.3.0)
     plist (3.1.0)
-    rack (1.4.1)
-    rack-protection (1.2.0)
+    rack (1.4.5)
+    rack-protection (1.5.1)
       rack
-    rack-test (0.6.1)
+    rack-test (0.6.2)
       rack (>= 1.0)
-    rake (0.9.2.2)
+    rake (0.9.6)
     rest-client (1.6.7)
       mime-types (>= 1.16)
-    rspec (2.10.0)
-      rspec-core (~> 2.10.0)
-      rspec-expectations (~> 2.10.0)
-      rspec-mocks (~> 2.10.0)
-    rspec-core (2.10.0)
-    rspec-expectations (2.10.0)
-      diff-lcs (~> 1.1.3)
-    rspec-mocks (2.10.1)
+    rspec (2.14.1)
+      rspec-core (~> 2.14.0)
+      rspec-expectations (~> 2.14.0)
+      rspec-mocks (~> 2.14.0)
+    rspec-core (2.14.7)
+    rspec-expectations (2.14.4)
+      diff-lcs (>= 1.1.3, < 2.0)
+    rspec-mocks (2.14.4)
     ruby-debug-base19 (0.11.25)
       columnize (>= 0.3.1)
       linecache19 (>= 0.5.11)
@@ -97,13 +132,18 @@ GEM
       daemons (>= 1.0.9)
       eventmachine (>= 0.12.6)
       rack (>= 1.0.0)
-    tilt (1.3.3)
+    tilt (1.4.1)
+    uuidtools (2.1.4)
+    xcodeproj (0.11.1)
+      activesupport (~> 3.0)
+      colored (~> 1.2)
 
 PLATFORMS
   ruby
 
 DEPENDENCIES
-  bundler (~> 1.1.0)
+  bundler (~> 1.3.0)
+  cocoapods (= 0.25.0)
   faker (= 1.0.1)
   mongo
   rack-oauth2-server!

@@ -6,6 +6,9 @@ Pod::Spec.new do |s|
   s.author       =  { 'Blake Watters' => 'blakewatters@gmail.com' }
   s.source       =  { :git => 'https://github.com/Taptera/RestKit.git', :tag => "tap_v#{s.version}" }
   s.license      =  'Apache License, Version 2.0'
+  
+  s.platform     = :osx, '10.7'
+  s.platform     = :ios, '5.0'
 
   s.source_files =  'Code/RestKit.h'
 
